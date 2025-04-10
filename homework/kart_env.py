@@ -6,15 +6,18 @@ import matplotlib.pyplot as plt
 
 RESCUE_TIMEOUT = 15
 
+# custom SuperTuxKArt gymnasium environment for this project's usage
+
 class SuperTuxKartEnv(gym.Env):
-    def __init__(self, track='lighthouse', max_frames=1000):
+    def __init__(self, track, max_frames=1000):
         super().__init__()
+        # declaring variables to be used later
         self.track = track
         self.max_frames = max_frames
         self.pytux = PyTux(screen_width=128, screen_height=96)
         self.mode = "human"
     
-        # Gym action space: steer [-1, 1], acceleration [0, 1], 3 binary flags
+        # Gym action space: steer [-1, 1], acceleration [0, 1], 3 binary flags for brake, nitro, and drift
         self.action_space = gym.spaces.Dict({
             'steer': gym.spaces.Box(low=-1.0, high=1.0, shape=(), dtype=np.float32),
             'acceleration': gym.spaces.Box(low=0.0, high=1.0, shape=(), dtype=np.float32),
@@ -23,17 +26,17 @@ class SuperTuxKartEnv(gym.Env):
             'drift': gym.spaces.Discrete(2),
         })
 
-        # Observation is the image (you could also include kart state info)
+        # observation is the image of the frame of the game
         self.observation_space = gym.spaces.Box(
             low=0, high=255, shape=(96, 128, 3), dtype=np.uint8
         )
 
-        self.step_count = 0
-        self.last_rescue = 0
 
+    # looking at reset usage in utils.py and just applying it to this function called reset
+    # reminder that reset is called before every race starts, so just need to think about what conditions need to be met at race start
     def reset(self, seed=None, options=None):
 
-        # Create a plot figure and axis for rendering
+        # create a plot figure and axis for rendering
         self.fig, self.ax = plt.subplots()
 
         print("Resetting the environment...")
@@ -41,121 +44,109 @@ class SuperTuxKartEnv(gym.Env):
             self.pytux.k.stop()
             del self.pytux.k
 
+        # self config that was used in utils.py
         self.config = pystk.RaceConfig()
-        self.config.num_kart = 1  # For a single kart in this case
+        self.config.num_kart = 1  
         self.config.players[0].controller = pystk.PlayerConfig.Controller.PLAYER_CONTROL
-        self.config.track = 'lighthouse'  # Specify the track here
+        self.config.track = self.track 
 
 
+        # starting race, similar to how it is done in utils.py
         self.pytux.k = pystk.Race(self.config)
         self.pytux.k.start()
         self.pytux.k.step()
 
-        # Update the track object and check its length
+        # update the track object and check its length, same as un utils.py
         self.track = pystk.Track()
         self.track.update()
 
+        # declaring useful variables and setting them to zero
         self.step_count = 0
         self.last_rescue = 0
         self.t = 0
 
+        # return method for gymnasium, required to return object and dictionary, here our dictionary is blank since we dont want to add meta data rn
         obs = np.array(self.pytux.k.render_data[0].image)
-        print(f"Observation shape: {obs.shape}")  # Add a print statement for debugging
+        return obs, {}  
 
-        return obs, {}  # <- this part is critical!
-
+    # defining what step looks lik in gym, copying a lot from utils.py
     def step(self, action_dict):
+        # updating steps and time step
         self.step_count += 1
         self.t += 1
 
+        # IF the racer doesn't finish the track within 1000 time steps, just end game 
         if self.t>1000:
             terminated = 1
 
-        # Update world state
+        # update world state at each step
         state = pystk.WorldState()
         state.update()
         kart = state.players[0].kart
 
-        # Build action
+        # building action
         action = pystk.Action()
+        # adding action attributes, RIGHT NOW IT IS RANDOM in the future we will poll action from neural net
         action.steer = float(action_dict['steer'])
         action.acceleration = float(action_dict['acceleration'])
         action.brake = bool(action_dict['brake'])
         action.nitro = bool(action_dict['nitro'])
         action.drift = bool(action_dict['drift'])
 
-        # Detect crash or invalid kart state
+        # detecting etect crash or  timeout
         if (np.linalg.norm(kart.velocity)) < 1 and self.t-self.last_rescue> RESCUE_TIMEOUT:
             print("Kart crashed! Respawning...")
             action.rescue = True
             self.last_rescue = self.t
 
-        # Step the simulation
+        # step through the simulation
         self.pytux.k.step(action)
 
-        # Update track as a Track object (this should be done in reset as well)
+        # Update track
         self.track = pystk.Track()
         self.track.update()
-        # Get the track length safely
-        track_length = self.track.length if self.track.length > 0 else 1.0  # avoid zero division
+        # get the track length 
+        # adding stuff to avoid division
+        track_length = self.track.length if self.track.length > 0 else 1.0  
 
 
-        # Get new observation
+        # new observation after stepping through the environment
         obs = np.array(self.pytux.k.render_data[0].image)
 
-        # Calculate reward (customize this as needed)
+        # BASIC REWARD, WILL NEED TO DO SOME REWARD SHAPING LATER
         reward = kart.overall_distance
 
-        # Safety check for track length
+        # check for track length
         terminated = np.isclose(kart.overall_distance / track_length, 1.0, atol=2e-3)
         truncated = self.step_count >= self.max_frames
 
         return obs, reward, terminated, truncated, {}
 
-    def respawn_kart(self, kart):
-        """
-        Respawn the kart at a close position to the crash site.
-        You can customize the respawn location, but this is a basic example.
-        """
-        # Here we respawn the kart to a nearby location. You can adjust the offset as needed.
-        crash_location = kart.location
-        respawn_location = crash_location + np.array([5.0, 0.0, 0.0])  # Example respawn near the crash
-        kart.location = respawn_location
 
-        # Optionally, reset the kart's velocity, rotation, or any other states if necessary
-        kart.velocity = np.array([0.0, 0.0, 0.0])  # Reset velocity
-        kart.rotation = np.array([0.0, 0.0, 0.0])  # Reset rotation
-        print(f"Respawning kart at location: {respawn_location}")
-
-
-    def render(self):
+    # rendering image to see kart
+    def render(self, done):
         import matplotlib.pyplot as plt
         if self.mode == 'human':
-
-            #state = pystk.WorldState()
-            #state.update()
-            #kart = state.players[0].kart
             
-            # Assuming self.pytux.k.render_data[0].image is the image of the kart's view
+            # getting image of the current track (using utils.py version)
             img = np.array(self.pytux.k.render_data[0].image)
 
-            # Clear the previous plot
+            # clear the previous plot and show image
             self.ax.clear()
-
-            # Show the current image
             self.ax.imshow(img)
 
-            # Assuming you have projection and view matrices for the kart's location
-            WH2 = np.array([128, 96]) / 2
+            # adding race car current point, taking out for now because we dont need
+            #WH2 = np.array([128, 96]) / 2
             #ax.add_artist(plt.Circle(WH2 * (1 + self._to_image(kart.location, proj, view)), 2, ec='b', fill=False, lw=1.5))
 
 
-            # Pause briefly to update the figure and create an animation effect
+            # draw and then pause
             plt.draw()
             plt.pause(1e-3)
         
             # Close the figure to prevent memory overload (useful in a loop)
-            #plt.close(fig)
+            if done:
+                plt.close(self.fig)
 
             return img  # Or you can return other relevant information if need
 
