@@ -3,15 +3,15 @@
 <table>
   <tr>
     <td align="center">
-      <img src="./images/IMG4_lighthouse.png" width="200px"><br>
+      <img src="./images/IMG4_lighthouse.png" width="300px"><br>
       <b>lighthouse </b>b
     </td>
     <td align="center">
-      <img src="./images/IMG5_zengarden.png" width="200px"><br>
+      <img src="./images/IMG5_zengarden.png" width="300px"><br>
       <b>zengarden</b>
     </td>
     <td align="center">
-      <img src="./images/IMG3_hacienda.png" width="200px"><br>
+      <img src="./images/IMG3_hacienda.png" width="300px"><br>
       <b>hacienda</b>
     </td>
   </tr>
@@ -20,15 +20,15 @@
 <table>
   <tr>
     <td align="center">
-      <img src="./images/IMG1_snowtux.png" width="200px"><br>
+      <img src="./images/IMG1_snowtux.png" width="300px"><br>
       <b>snowtuxpeak</b>
     </td>
     <td align="center">
-      <img src="./images/IMG2_cornfield.png" width="200px"><br>
+      <img src="./images/IMG2_cornfield.png" width="300px"><br>
       <b>cornfield_crossing</b>
     </td>
     <td align="center">
-      <img src="./images/IMG6_scotland.png" width="200px"><br>
+      <img src="./images/IMG6_scotland.png" width="300px"><br>
       <b>scotland</b>
     </td>
   </tr>
