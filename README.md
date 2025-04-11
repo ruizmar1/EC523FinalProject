@@ -1,13 +1,17 @@
 # EC523FinalProject
 
-<p align="center">
-  <img src="./images/IMG_1.png" width="300px"><br>
-  <b>Label for Image 1</b>
-</p>
-<p align="center">
-  <img src="./images/IMG_2.png" width="300px"><br>
-  <b>Label for Image 2</b>
-</p>
+<table>
+  <tr>
+    <td align="center">
+      <img src="./images/IMG_1.png" width="200px"><br>
+      <b>SnowTuxPeak/b>
+    </td>
+    <td align="center">
+      <img src="./images/IMG_2.png" width="200px"><br>
+      <b>CornfieldCrossing/b>
+    </td>
+  </tr>
+</table>
 
 
 Currently the biggest changes we made are in the kart_env.py file and marissa_test.py file.
