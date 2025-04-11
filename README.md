@@ -1,5 +1,13 @@
 # EC523FinalProject
 
+<p align="center">
+SnowTuxPeak
+<p align="center">
+<img src="./images/IMG_1.jpg" width="50%">
+</p>
+</p>
+
+
 Currently the biggest changes we made are in the kart_env.py file and marissa_test.py file.
 
 To find kart_env.py go to EC523FinalProject/homework/kart_env.py
