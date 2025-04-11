@@ -3,11 +3,9 @@
 <div align="center" style="display: flex; justify-content: center; gap: 20px;">
   <figure style="text-align: center;">
     <img src="./images/IMG_1.png" width="300px">
-    <figcaption>SnoTuxPeak</figcaption>
   </figure>
   <figure style="text-align: center;">
     <img src="./images/IMG_2.png" width="300px">
-    <figcaption>Cornfield Crossing</figcaption>
   </figure>
 </div>
 
