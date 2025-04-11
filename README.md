@@ -1,13 +1,17 @@
 # EC523FinalProject
 
-<div align="center" style="display: flex; justify-content: center; gap: 20px;">
-  <figure style="text-align: center;">
-    <img src="./images/IMG_1.png" width="300px">
-  </figure>
-  <figure style="text-align: center;">
-    <img src="./images/IMG_2.png" width="300px">
-  </figure>
-</div>
+<table>
+  <tr>
+    <td align="center">
+      <img src="./images/IMG_1.png" width="200px"><br>
+      <b>SnowTuxPeak</b>
+    </td>
+    <td align="center">
+      <img src="./images/IMG_2.png" width="200px"><br>
+      <b>Cornfield Crossing</b>
+    </td>
+  </tr>
+</table>
 
 
 Currently the biggest changes we made are in the kart_env.py file and marissa_test.py file.
