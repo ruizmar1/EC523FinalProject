@@ -14,6 +14,11 @@
       <img src="./images/IMG3_hacienda.png" width="200px"><br>
       <b>hacienda</b>
     </td>
+  </tr>
+</table>
+
+<table>
+  <tr>
     <td align="center">
       <img src="./images/IMG1_snowtux.png" width="200px"><br>
       <b>snowtuxpeak</b>
