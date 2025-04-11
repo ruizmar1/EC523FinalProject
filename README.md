@@ -3,7 +3,8 @@
 <p align="center">
 SnowTuxPeak
 <p align="center">
-<img src="./images/IMG_1.jpg" width="50%">
+<img src="./images/IMG_1.png" width="50%">
+<img src="./images/IMG_2.png" width="50%">
 </p>
 </p>
 
