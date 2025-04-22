@@ -3,8 +3,8 @@
 <table>
   <tr>
     <td align="center">
-      <img src="./images/IMG4_lighthouse.png" width="300px"><b>
-      <b>lighthouse </b>b
+      <img src="./images/IMG4_lighthouse.png" width="300px"><br>
+      <b>lighthouse </b>
     </td>
     <td align="center">
       <img src="./images/IMG5_zengarden.png" width="300px"><br>
