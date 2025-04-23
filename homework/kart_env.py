@@ -3,10 +3,11 @@ import numpy as np
 import pystk
 from utils import PyTux
 import matplotlib.pyplot as plt
+import cv2
 
 RESCUE_TIMEOUT = 15
 
-# custom SuperTuxKArt gymnasium environment for this project's usage
+# custom SuperTuxKart gymnasium environment for this project's usage
 
 class SuperTuxKartEnv(gym.Env):
     def __init__(self, track, max_frames=1000):
@@ -17,19 +18,18 @@ class SuperTuxKartEnv(gym.Env):
         self.pytux = PyTux(screen_width=128, screen_height=96)
         self.mode = "human"
     
-        # Gym action space: steer [-1, 1], acceleration [0, 1], 3 binary flags for brake, nitro, and drift
-        self.action_space = gym.spaces.Dict({
-            'steer': gym.spaces.Box(low=-1.0, high=1.0, shape=(), dtype=np.float32),
-            'acceleration': gym.spaces.Box(low=0.0, high=1.0, shape=(), dtype=np.float32),
-            'brake': gym.spaces.Discrete(2),
-            'nitro': gym.spaces.Discrete(2),
-            'drift': gym.spaces.Discrete(2),
-        })
+        # Gym action space, all continuous until we discretize the discrete values
+        self.action_space = gym.spaces.Box(
+            low=np.array([-1.0, 0.0, 0.0, 0.0, 0.0]),
+            high=np.array([1.0, 1.0, 1.0, 1.0, 1.0]),
+            dtype=np.float32
+        )
 
         # observation is the image of the frame of the game
         self.observation_space = gym.spaces.Box(
             low=0, high=255, shape=(96, 128, 3), dtype=np.uint8
         )
+        
 
 
     # looking at reset usage in utils.py and just applying it to this function called reset
@@ -70,7 +70,7 @@ class SuperTuxKartEnv(gym.Env):
         return obs, {}  
 
     # defining what step looks lik in gym, copying a lot from utils.py
-    def step(self, action_dict):
+    def step(self, action_array):
         # updating steps and time step
         self.step_count += 1
         self.t += 1
@@ -87,11 +87,11 @@ class SuperTuxKartEnv(gym.Env):
         # building action
         action = pystk.Action()
         # adding action attributes, RIGHT NOW IT IS RANDOM in the future we will poll action from neural net
-        action.steer = float(action_dict['steer'])
-        action.acceleration = float(action_dict['acceleration'])
-        action.brake = bool(action_dict['brake'])
-        action.nitro = bool(action_dict['nitro'])
-        action.drift = bool(action_dict['drift'])
+        action.steer = float(action_array[0])
+        action.acceleration = float(action_array[1])
+        action.brake = bool(action_array[2] > 0.5)
+        action.nitro = bool(action_array[3] > 0.5)
+        action.drift = bool(action_array[4] > 0.5)
 
         # detecting etect crash or  timeout
         if (np.linalg.norm(kart.velocity)) < 1 and self.t-self.last_rescue> RESCUE_TIMEOUT:
@@ -152,3 +152,4 @@ class SuperTuxKartEnv(gym.Env):
 
     def close(self):
         self.pytux.close()
+
