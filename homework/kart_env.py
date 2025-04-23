@@ -8,6 +8,7 @@ RESCUE_TIMEOUT = 15
 
 # custom SuperTuxKArt gymnasium environment for this project's usage
 
+
 class SuperTuxKartEnv(gym.Env):
     def __init__(self, track, max_frames=1000):
         super().__init__()
@@ -48,7 +49,7 @@ class SuperTuxKartEnv(gym.Env):
         self.config = pystk.RaceConfig()
         self.config.num_kart = 1  
         self.config.players[0].controller = pystk.PlayerConfig.Controller.PLAYER_CONTROL
-        self.config.track = self.track 
+        self.config.track = str(self.track)
 
 
         # starting race, similar to how it is done in utils.py
@@ -123,32 +124,27 @@ class SuperTuxKartEnv(gym.Env):
         return obs, reward, terminated, truncated, {}
 
 
-    # rendering image to see kart
-    def render(self, done):
-        import matplotlib.pyplot as plt
-        if self.mode == 'human':
+def render(self):
+    img = np.array(self.pytux.k.render_data[0].image)
+    
+    if self.mode == 'human':
+        # Visualization using matplotlib
+        if not hasattr(self, 'fig'):
+            self.fig, self.ax = plt.subplots()
             
-            # getting image of the current track (using utils.py version)
-            img = np.array(self.pytux.k.render_data[0].image)
-
-            # clear the previous plot and show image
-            self.ax.clear()
-            self.ax.imshow(img)
-
-            # adding race car current point, taking out for now because we dont need
-            #WH2 = np.array([128, 96]) / 2
-            #ax.add_artist(plt.Circle(WH2 * (1 + self._to_image(kart.location, proj, view)), 2, ec='b', fill=False, lw=1.5))
-
-
-            # draw and then pause
-            plt.draw()
-            plt.pause(1e-3)
+        self.ax.clear()
+        self.ax.imshow(img)
+        plt.draw()
+        plt.pause(1e-3)  # Required for matplotlib animation
         
-            # Close the figure to prevent memory overload (useful in a loop)
-            if done:
-                plt.close(self.fig)
+    elif self.mode == 'rgb_array':
+        # Direct return for video recording
+        return img
+    
+    return None  # Maintain gymnasium compatibility
 
-            return img  # Or you can return other relevant information if need
 
-    def close(self):
-        self.pytux.close()
+def close(self):
+    if hasattr(self, 'fig'):
+        plt.close(self.fig)
+    self.pytux.close()
