@@ -20,7 +20,7 @@ class SuperTuxKartEnv(gym.Env):
     
         # Gym action space, all continuous until we discretize the discrete values
         self.action_space = gym.spaces.Box(
-            low=np.array([-1.0, 0.0, 0.0, 0.0, 0.0]),
+            low=np.array([-1.0, 0.0, 0.0, 0.0, 0.0]), #steer, acc, break, drift, nitro (to check)
             high=np.array([1.0, 1.0, 1.0, 1.0, 1.0]),
             dtype=np.float32
         )

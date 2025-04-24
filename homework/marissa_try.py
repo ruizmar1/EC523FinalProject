@@ -1,5 +1,11 @@
 from kart_env import SuperTuxKartEnv
 import argparse
+import torch #ADDED BY marghe might be wrong
+import torch.nn as nn #ADDED BY marghe might be wrong
+import numpy as np #ADDED BY marghe might be wrong
+import cv2 #ADDED BY marghe might be wrong
+from ddpg_agent import Actor #ADDED BY marghe might be wrong
+
 def preprocess_observation(obs):
         # convert to grayscale
         gray = cv2.cvtColor(obs, cv2.COLOR_RGB2GRAY)
@@ -8,22 +14,66 @@ def preprocess_observation(obs):
         # Normalize pixel values
         normalized = resized / 255.0
         # Flatten the image
-        return normalized.flatten()
+        #return normalized.flatten() #what it was before marghe changed it below
+        return normalized.flatten().astype(np.float32)  # Ensure float32 #ADDED BY marghe might be wrong
 
 parser = argparse.ArgumentParser(description="Run SuperTuxKart on a selected track.")
-parser.add_argument('--track', type=str, default='lighthouse', help='Name of the track to run')
+parser.add_argument('--track', type=str, default='lighthouse', help='Name of the track to run') #Picks the track, if you want another track you can change this
 args = parser.parse_args()
 
 env = SuperTuxKartEnv(track=args.track)
 obs, _ = env.reset()
 obs = preprocess_observation(obs)
-t = 0
+obs_dim = np.prod(preprocess_observation(obs).shape) #ADDED BY marghe might be wrong
+# Load actor model
+
+#--------------ADDED BY MARGHE MIGHT BE WRONG
+# Mock env wrapper for model init
+class DummyEnv:
+    def __init__(self, obs_shape, action_space):
+        self.single_observation_space = gym.spaces.Box(low=0, high=1, shape=(obs_shape,), dtype=np.float32)
+        self.single_action_space = action_space
+        self.action_space = action_space
+
+dummy_env = DummyEnv(obs_dim, env.action_space)
+
+
+actor = Actor(dummy_env)
+actor.load_state_dict(torch.load("runs/<your_run_name>/ddpg_continuous_action.cleanrl_model")[0])
+actor.eval()
+
+#------------------------
+
+
+
+# t = 0
+# done = False
+# while not done:
+#     action = env.action_space.sample()  # Replace with your controller or RL agent
+#     obs, reward, terminated, truncated, _ = env.step(action) 
+#     obs = preprocess_observation(obs)
+#     done = terminated or truncated
+#     t += 1
+#     env.render(done)
+# print("Finished at t=", t)
+
+
+
+#-------------------ADDED BY MARGHE MIGHT BE WRONG
 done = False
+t = 0
+obs = preprocess_observation(obs)
 while not done:
-    action = env.action_space.sample()  # Replace with your controller or RL agent
+    with torch.no_grad():
+        obs_tensor = torch.tensor(obs, dtype=torch.float32).unsqueeze(0)  # shape: [1, obs_dim]
+        action = actor(obs_tensor).squeeze(0).numpy()  # shape: (5,)
+
     obs, reward, terminated, truncated, _ = env.step(action)
     obs = preprocess_observation(obs)
     done = terminated or truncated
     t += 1
     env.render(done)
 print("Finished at t=", t)
+#------------------------
+
+#episode ends when the end of the track is reached or when it reaches 100000
