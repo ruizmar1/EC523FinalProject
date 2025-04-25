@@ -4,18 +4,24 @@ import torch #ADDED BY marghe might be wrong
 import torch.nn as nn #ADDED BY marghe might be wrong
 import numpy as np #ADDED BY marghe might be wrong
 import cv2 #ADDED BY marghe might be wrong
-from ddpg_agent import Actor #ADDED BY marghe might be wrong
+from ddpg_continuous_action import Actor #ADDED BY marghe might be wrong
+import gymnasium as gym
 
 def preprocess_observation(obs):
-        # convert to grayscale
+    # If obs is already grayscale (2D), skip color conversion
+    if len(obs.shape) == 3 and obs.shape[2] == 3:
         gray = cv2.cvtColor(obs, cv2.COLOR_RGB2GRAY)
-        # resize to a smaller shape
-        resized = cv2.resize(gray, (64, 64))
-        # Normalize pixel values
-        normalized = resized / 255.0
-        # Flatten the image
-        #return normalized.flatten() #what it was before marghe changed it below
-        return normalized.flatten().astype(np.float32)  # Ensure float32 #ADDED BY marghe might be wrong
+    else:
+        gray = obs  # Already grayscale
+
+    # Resize to a smaller shape
+    resized = cv2.resize(gray, (64, 64))
+    
+    # Normalize pixel values
+    normalized = resized / 255.0
+    
+    # Flatten the image
+    return normalized.flatten().astype(np.float32)
 
 parser = argparse.ArgumentParser(description="Run SuperTuxKart on a selected track.")
 parser.add_argument('--track', type=str, default='lighthouse', help='Name of the track to run') #Picks the track, if you want another track you can change this
@@ -37,9 +43,8 @@ class DummyEnv:
 
 dummy_env = DummyEnv(obs_dim, env.action_space)
 
-
 actor = Actor(dummy_env)
-actor.load_state_dict(torch.load("runs/<your_run_name>/ddpg_continuous_action.cleanrl_model")[0])
+#actor.load_state_dict(torch.load("runs/<your_run_name>/ddpg_continuous_action.cleanrl_model")[0])
 actor.eval()
 
 #------------------------
@@ -60,6 +65,8 @@ actor.eval()
 
 
 #-------------------ADDED BY MARGHE MIGHT BE WRONG
+### SSA TESTED UP TO HERE
+## ok so what we need to do now is do the gradient descent update after the loop is done and then re run the loop, I think last time i did 50 iterations
 done = False
 t = 0
 obs = preprocess_observation(obs)
