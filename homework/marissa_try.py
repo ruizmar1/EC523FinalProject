@@ -70,17 +70,20 @@ actor.eval()
 done = False
 t = 0
 obs = preprocess_observation(obs)
-while not done:
-    with torch.no_grad():
-        obs_tensor = torch.tensor(obs, dtype=torch.float32).unsqueeze(0)  # shape: [1, obs_dim]
-        action = actor(obs_tensor).squeeze(0).numpy()  # shape: (5,)
+for i in range(50):
 
-    obs, reward, terminated, truncated, _ = env.step(action)
-    obs = preprocess_observation(obs)
-    done = terminated or truncated
-    t += 1
-    env.render(done)
-print("Finished at t=", t)
+    while not done:
+        with torch.no_grad():
+            obs_tensor = torch.tensor(obs, dtype=torch.float32).unsqueeze(0)  # shape: [1, obs_dim]
+            action = actor(obs_tensor).squeeze(0).numpy()  # shape: (5,)
+
+        obs, reward, terminated, truncated, _ = env.step(action)
+        obs = preprocess_observation(obs)
+        done = terminated or truncated
+        t += 1
+        env.render(done)
+    print("Finished at t=", t)
+
 #------------------------
 
 #episode ends when the end of the track is reached or when it reaches 100000

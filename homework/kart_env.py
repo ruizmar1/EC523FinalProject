@@ -13,7 +13,7 @@ class SuperTuxKartEnv(gym.Env):
     def __init__(self, track, max_frames=1000):
         super().__init__()
         # declaring variables to be used later
-        self.track = track
+        self.track_name = track
         self.max_frames = max_frames
         self.pytux = PyTux(screen_width=128, screen_height=96)
         self.mode = "human"
@@ -35,7 +35,8 @@ class SuperTuxKartEnv(gym.Env):
     # looking at reset usage in utils.py and just applying it to this function called reset
     # reminder that reset is called before every race starts, so just need to think about what conditions need to be met at race start
     def reset(self, seed=None, options=None):
-
+        if hasattr(self, 'fig') and plt.fignum_exists(self.fig.number):
+            plt.close(self.fig)
         # create a plot figure and axis for rendering
         self.fig, self.ax = plt.subplots()
 
@@ -48,15 +49,14 @@ class SuperTuxKartEnv(gym.Env):
         self.config = pystk.RaceConfig()
         self.config.num_kart = 1  
         self.config.players[0].controller = pystk.PlayerConfig.Controller.PLAYER_CONTROL
-        self.config.track = self.track 
-
+        self.config.track = self.track_name  # Use the track name string instead of Track object
 
         # starting race, similar to how it is done in utils.py
         self.pytux.k = pystk.Race(self.config)
         self.pytux.k.start()
         self.pytux.k.step()
 
-        # update the track object and check its length, same as un utils.py
+        # Update track object - keep this separate from the config
         self.track = pystk.Track()
         self.track.update()
 
@@ -65,9 +65,34 @@ class SuperTuxKartEnv(gym.Env):
         self.last_rescue = 0
         self.t = 0
 
-        # return method for gymnasium, required to return object and dictionary, here our dictionary is blank since we dont want to add meta data rn
+        # return method for gymnasium
         obs = np.array(self.pytux.k.render_data[0].image)
-        return obs, {}  
+        return obs, {}
+
+    # def reset(self, seed=None, options=None):
+    #     # Close any existing figure
+    #     if hasattr(self, 'fig') and plt.fignum_exists(self.fig.number):
+    #         plt.close(self.fig)
+        
+    #     # Rest of your reset code...
+    #     self.config = pystk.RaceConfig()
+    #     self.config.num_kart = 1  
+    #     self.config.players[0].controller = pystk.PlayerConfig.Controller.PLAYER_CONTROL
+    #     self.config.track = self.track_name
+        
+    #     # Initialize new race
+    #     self.pytux.k = pystk.Race(self.config)
+    #     self.pytux.k.start()
+    #     self.pytux.k.step()
+        
+    #     # Reset tracking variables
+    #     self.step_count = 0
+    #     self.last_rescue = 0
+    #     self.t = 0
+        
+    #     # Return initial observation
+    #     obs = np.array(self.pytux.k.render_data[0].image)
+    #     return obs, {}
 
     # defining what step looks lik in gym, copying a lot from utils.py
     def step(self, action_array):
@@ -124,31 +149,30 @@ class SuperTuxKartEnv(gym.Env):
 
 
     # rendering image to see kart
-    def render(self, done):
-        import matplotlib.pyplot as plt
+    def render(self, done=False):
         if self.mode == 'human':
+            # Create figure if it doesn't exist
+            if not hasattr(self, 'fig') or not plt.fignum_exists(self.fig.number):
+                self.fig, self.ax = plt.subplots()
+                plt.ion()  # Interactive mode on
+                plt.show()
             
-            # getting image of the current track (using utils.py version)
+            # Get current game image
             img = np.array(self.pytux.k.render_data[0].image)
-
-            # clear the previous plot and show image
+            
+            # Update display
             self.ax.clear()
             self.ax.imshow(img)
-
-            # adding race car current point, taking out for now because we dont need
-            #WH2 = np.array([128, 96]) / 2
-            #ax.add_artist(plt.Circle(WH2 * (1 + self._to_image(kart.location, proj, view)), 2, ec='b', fill=False, lw=1.5))
-
-
-            # draw and then pause
             plt.draw()
-            plt.pause(1e-3)
-        
-            # Close the figure to prevent memory overload (useful in a loop)
+            plt.pause(0.001)  # Small pause to allow GUI updates
+            
+            # Close figure if episode is done
             if done:
                 plt.close(self.fig)
-
-            return img  # Or you can return other relevant information if need
+                delattr(self, 'fig')
+                delattr(self, 'ax')
+            
+            return img
 
     def close(self):
         self.pytux.close()

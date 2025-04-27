@@ -15,6 +15,8 @@ import tyro
 from stable_baselines3.common.buffers import ReplayBuffer
 from torch.utils.tensorboard import SummaryWriter
 from kart_env import SuperTuxKartEnv
+import argparse
+import cv2
 
 
 @dataclass
@@ -75,6 +77,31 @@ def make_env(seed, track_name):
         return env
 
     return thunk
+
+def preprocess_observation(obs):
+    # Ensure the observation is a numpy array
+    if isinstance(obs, np.ndarray):
+        # If the observation is already flattened (from vectorized env), reshape it
+        if len(obs.shape) == 1:
+            # Reshape to original image shape (96, 128, 3) based on your observation space
+            obs = obs.reshape(96, 128, 3)
+        
+        # Convert to grayscale if it's a color image
+        if len(obs.shape) == 3 and obs.shape[2] == 3:
+            gray = cv2.cvtColor(obs, cv2.COLOR_RGB2GRAY)
+        else:
+            gray = obs  # Already grayscale
+        
+        # Resize to a smaller shape
+        resized = cv2.resize(gray, (64, 64))
+        
+        # Normalize pixel values
+        normalized = resized / 255.0
+        
+        # Flatten the image
+        return normalized.flatten().astype(np.float32)
+    else:
+        raise ValueError(f"Observation must be a numpy array, got {type(obs)}")
 
 
 # ALGO LOGIC: initialize agent here:
@@ -152,7 +179,18 @@ poetry run pip install "stable_baselines3==2.0.0a1"
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
 
     # env setup
-    envs = gym.vector.SyncVectorEnv([make_env(args.env_id, args.seed, 0, args.capture_video, run_name)])
+    parser = argparse.ArgumentParser(description="Run SuperTuxKart on a selected track.")
+    parser.add_argument('--track', type=str, default='lighthouse', help='Name of the track to run') #Picks the track, if you want another track you can change this
+    args1 = parser.parse_args()
+
+    #env = SuperTuxKartEnv(track=args1.track)
+    #obs, _ = env.reset()
+    #obs = preprocess_observation(obs)
+    #obs_dim = np.prod(preprocess_observation(obs).shape) #ADDED BY marghe might be wrong
+    # Load actor model
+
+
+    envs = gym.vector.SyncVectorEnv([make_env(args.seed,  args1.track)])
     assert isinstance(envs.single_action_space, gym.spaces.Box), "only continuous action space is supported"
 
     actor = Actor(envs).to(device)
@@ -176,6 +214,9 @@ poetry run pip install "stable_baselines3==2.0.0a1"
 
     # TRY NOT TO MODIFY: start the game
     obs, _ = envs.reset(seed=args.seed)
+    if isinstance(obs, dict):
+        obs = obs['image']  # or whatever key contains the image
+        bs = preprocess_observation(obs)
     for global_step in range(args.total_timesteps):
         # ALGO LOGIC: put action logic here
         if global_step < args.learning_starts:
@@ -189,6 +230,16 @@ poetry run pip install "stable_baselines3==2.0.0a1"
         # TRY NOT TO MODIFY: execute the game and log data.
         next_obs, rewards, terminations, truncations, infos = envs.step(actions)
 
+        # if global_step % 100 ==0:
+        #     env_to_render = envs.envs[0].env
+        #     done = terminations[0] or truncations[0]
+        #     rendered_img = env_to_render.render(done)
+        
+
+        env_to_render = envs.envs[0].env
+        done = terminations[0] or truncations[0]
+        rendered_img = env_to_render.render(done)
+
         # TRY NOT TO MODIFY: record rewards for plotting purposes
         if "final_info" in infos:
             for info in infos["final_info"]:
@@ -199,9 +250,14 @@ poetry run pip install "stable_baselines3==2.0.0a1"
 
         # TRY NOT TO MODIFY: save data to reply buffer; handle `final_observation`
         real_next_obs = next_obs.copy()
-        for idx, trunc in enumerate(truncations):
-            if trunc:
-                real_next_obs[idx] = infos["final_observation"][idx]
+        for idx, (trunc, term) in enumerate(zip(truncations, terminations)):
+            if trunc or term:
+                # Check if 'final_observation' exists in infos
+                if "final_observation" in infos:
+                    real_next_obs[idx] = infos["final_observation"][idx]
+                else:
+                    # If no final observation, just use the current next_obs
+                    real_next_obs[idx] = next_obs[idx]
         rb.add(obs, real_next_obs, actions, rewards, terminations, infos)
 
         # TRY NOT TO MODIFY: CRUCIAL step easy to overlook
@@ -222,6 +278,7 @@ poetry run pip install "stable_baselines3==2.0.0a1"
             q_optimizer.zero_grad()
             qf1_loss.backward()
             q_optimizer.step()
+            print("Running optimizer")
 
             if global_step % args.policy_frequency == 0:
                 actor_loss = -qf1(data.observations, actor(data.observations)).mean()
