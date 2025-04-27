@@ -61,7 +61,9 @@ class Args:
     """the batch size of sample from the reply memory"""
     exploration_noise: float = 0.1
     """the scale of exploration noise"""
-    learning_starts: int = 25e3
+    #learning_starts: int = 25e3
+    #MARGHE changed this to 1001 to make learning start after 1001 steps!!
+    learning_starts: int = 1001
     """timestep to start learning"""
     policy_frequency: int = 2
     """the frequency of training policy (delayed)"""
@@ -108,7 +110,8 @@ def preprocess_observation(obs):
 class QNetwork(nn.Module):
     def __init__(self, env):
         super().__init__()
-        self.fc1 = nn.Linear(np.array(env.single_observation_space.shape).prod() + np.prod(env.single_action_space.shape), 256)
+        #self.fc1 = nn.Linear(np.array(env.single_observation_space.shape).prod() + np.prod(env.single_action_space.shape), 256)
+        self.fc1 = nn.Linear(64*64 + np.prod(env.single_action_space.shape), 256) #CHANGED BY MARGHE TO FIX MATRIX ERROR
         self.fc2 = nn.Linear(256, 256)
         self.fc3 = nn.Linear(256, 1)
 
@@ -123,7 +126,8 @@ class QNetwork(nn.Module):
 class Actor(nn.Module):
     def __init__(self, env):
         super().__init__()
-        self.fc1 = nn.Linear(np.array(env.single_observation_space.shape).prod(), 256)
+        #self.fc1 = nn.Linear(np.array(env.single_observation_space.shape).prod(), 256)
+        self.fc1 = nn.Linear(64*64, 256)  # CHANGED BY MARGHE TO FIX MATRIX ERROR
         self.fc2 = nn.Linear(256, 256)
         self.fc_mu = nn.Linear(256, np.prod(env.single_action_space.shape))
         # action rescaling
@@ -216,13 +220,14 @@ poetry run pip install "stable_baselines3==2.0.0a1"
     obs, _ = envs.reset(seed=args.seed)
     if isinstance(obs, dict):
         obs = obs['image']  # or whatever key contains the image
-        bs = preprocess_observation(obs)
+        obs = preprocess_observation(obs)
     for global_step in range(args.total_timesteps):
         # ALGO LOGIC: put action logic here
         if global_step < args.learning_starts:
             actions = np.array([envs.single_action_space.sample() for _ in range(envs.num_envs)])
         else:
             with torch.no_grad():
+                processed_obs = preprocess_observation(obs) #ADDED BY MARGHE to fix s mstrix multiplication error
                 actions = actor(torch.Tensor(obs).to(device))
                 actions += torch.normal(0, actor.action_scale * args.exploration_noise)
                 actions = actions.cpu().numpy().clip(envs.single_action_space.low, envs.single_action_space.high)
@@ -265,6 +270,7 @@ poetry run pip install "stable_baselines3==2.0.0a1"
 
         # ALGO LOGIC: training.
         if global_step > args.learning_starts:
+            print("training") #marghe added to debug
             data = rb.sample(args.batch_size)
             with torch.no_grad():
                 next_state_actions = target_actor(data.next_observations)

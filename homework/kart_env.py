@@ -95,59 +95,116 @@ class SuperTuxKartEnv(gym.Env):
     #     return obs, {}
 
     # defining what step looks lik in gym, copying a lot from utils.py
+    #--------Marghe tried to change this to stop it from restarting randomly so I commented this step funciton out 
+    #and added a new one
+
+    # def step(self, action_array):
+    #     # updating steps and time step
+    #     self.step_count += 1
+    #     self.t += 1
+
+    #     # IF the racer doesn't finish the track within 1000 time steps, just end game 
+    #     if self.t>1000:
+    #         terminated = 1
+
+    #     # update world state at each step
+    #     state = pystk.WorldState()
+    #     state.update()
+    #     kart = state.players[0].kart
+
+    #     # building action
+    #     action = pystk.Action()
+    #     # adding action attributes, RIGHT NOW IT IS RANDOM in the future we will poll action from neural net
+    #     action.steer = float(action_array[0])
+    #     action.acceleration = float(action_array[1])
+    #     action.brake = bool(action_array[2] > 0.5)
+    #     action.nitro = bool(action_array[3] > 0.5)
+    #     action.drift = bool(action_array[4] > 0.5)
+
+    #     # detecting etect crash or  timeout
+    #     if (np.linalg.norm(kart.velocity)) < 1 and self.t-self.last_rescue> RESCUE_TIMEOUT:
+    #         print("Kart crashed! Respawning...")
+    #         action.rescue = True
+    #         self.last_rescue = self.t
+
+    #     # step through the simulation
+    #     self.pytux.k.step(action)
+
+    #     # Update track
+    #     self.track = pystk.Track()
+    #     self.track.update()
+    #     # get the track length 
+    #     # adding stuff to avoid division
+    #     track_length = self.track.length if self.track.length > 0 else 1.0  
+
+
+    #     # new observation after stepping through the environment
+    #     obs = np.array(self.pytux.k.render_data[0].image)
+
+    #     # BASIC REWARD, WILL NEED TO DO SOME REWARD SHAPING LATER
+    #     reward = kart.overall_distance
+
+    #     # check for track length
+    #     terminated = np.isclose(kart.overall_distance / track_length, 1.0, atol=2e-3)
+    #     truncated = self.step_count >= self.max_frames
+
+    #     return obs, reward, terminated, truncated, {}
+
+#MARGHE added the following to ty and fix the restarting envoroment issue
     def step(self, action_array):
-        # updating steps and time step
         self.step_count += 1
         self.t += 1
 
-        # IF the racer doesn't finish the track within 1000 time steps, just end game 
-        if self.t>1000:
-            terminated = 1
-
-        # update world state at each step
+        # Update world state
         state = pystk.WorldState()
         state.update()
         kart = state.players[0].kart
 
-        # building action
+        # Build action
         action = pystk.Action()
-        # adding action attributes, RIGHT NOW IT IS RANDOM in the future we will poll action from neural net
         action.steer = float(action_array[0])
         action.acceleration = float(action_array[1])
         action.brake = bool(action_array[2] > 0.5)
         action.nitro = bool(action_array[3] > 0.5)
         action.drift = bool(action_array[4] > 0.5)
 
-        # detecting etect crash or  timeout
-        if (np.linalg.norm(kart.velocity)) < 1 and self.t-self.last_rescue> RESCUE_TIMEOUT:
+        # Detect crash or timeout
+        if (np.linalg.norm(kart.velocity)) < 1 and self.t-self.last_rescue > RESCUE_TIMEOUT:
             print("Kart crashed! Respawning...")
             action.rescue = True
             self.last_rescue = self.t
 
-        # step through the simulation
+        # Step through simulation
         self.pytux.k.step(action)
 
         # Update track
-        self.track = pystk.Track()
         self.track.update()
-        # get the track length 
-        # adding stuff to avoid division
-        track_length = self.track.length if self.track.length > 0 else 1.0  
+        track_length = self.track.length if self.track.length > 0 else 1.0
 
-
-        # new observation after stepping through the environment
+        # Get new observation
         obs = np.array(self.pytux.k.render_data[0].image)
 
-        # BASIC REWARD, WILL NEED TO DO SOME REWARD SHAPING LATER
+        # Reward
         reward = kart.overall_distance
 
-        # check for track length
+        # Termination conditions
+        #terminated = np.isclose(kart.overall_distance / track_length, 1.0, atol=2e-3)
+        #truncated = self.step_count >= self.max_frames or self.t >= 1000  # Combined time limit condition
+
+        #Marghe trying to find the bug
         terminated = np.isclose(kart.overall_distance / track_length, 1.0, atol=2e-3)
-        truncated = self.step_count >= self.max_frames
+        if terminated:
+            print(f"Episode terminated after {self.step_count} steps (track completed!)")
+
+        if self.step_count >= self.max_frames or self.t >= 1000:
+            print(f"Episode truncated after {self.step_count} steps (time limit reached)")
+            truncated = True
+        else:
+            truncated = False
 
         return obs, reward, terminated, truncated, {}
 
-
+#--------------
     # rendering image to see kart
     def render(self, done=False):
         if self.mode == 'human':
