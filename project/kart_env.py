@@ -131,25 +131,30 @@ class SuperTuxKartEnv(gym.Env):
 
         return obs, reward, terminated, truncated, {}
 
-
-def render(self):
-    img = np.array(self.pytux.k.render_data[0].image)
-    
-    if self.mode == 'human':
-        # Visualization using matplotlib
-        if not hasattr(self, 'fig'):
-            self.fig, self.ax = plt.subplots()
+    def render(self, mode="human"):
+        if self.mode == 'human':
             
-        self.ax.clear()
-        self.ax.imshow(img)
-        plt.draw()
-        plt.pause(1e-3)  # Required for matplotlib animation
+            # getting image of the current track (using utils.py version)
+            img = np.array(self.pytux.k.render_data[0].image)
+
+            # clear the previous plot and show image
+            self.ax.clear()
+            self.ax.imshow(img)
+
+            # adding race car current point, taking out for now because we dont need
+            #WH2 = np.array([128, 96]) / 2
+            #ax.add_artist(plt.Circle(WH2 * (1 + self._to_image(kart.location, proj, view)), 2, ec='b', fill=False, lw=1.5))
+
+
+            # draw and then pause
+            plt.draw()
+            plt.pause(1e-3)
         
-    elif self.mode == 'rgb_array':
-        # Direct return for video recording
-        return img
-    
-    return None  # Maintain gymnasium compatibility
+            # Close the figure to prevent memory overload (useful in a loop)
+            if None:
+                plt.close(self.fig)
+
+            return img  # Or you can return other relevant information if need
 
 
 def close(self):
