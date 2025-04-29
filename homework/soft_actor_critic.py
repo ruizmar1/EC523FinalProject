@@ -18,7 +18,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 @dataclass
 class Args:
-    track: str = "lighthouse"
+    track_name: str = "lighthouse"
     """the track that the model will train on"""
     exp_name: str = os.path.basename(__file__)[: -len(".py")]
     """the name of this experiment"""
@@ -100,7 +100,7 @@ class DictToTensorWrapper(gym.Wrapper):
 
 def make_env(env_id, seed, idx, capture_video, run_name):
     def thunk():
-        env = SuperTuxKartEnv(track=args.track)
+        env = SuperTuxKartEnv(track_name=args.track_name)
         if capture_video and idx == 0:
             env = gym.wrappers.RecordVideo(env, f"videos/{run_name}", 
                 episode_trigger=lambda x: x % 100 == 0)
@@ -133,11 +133,11 @@ class SoftQNetwork(nn.Module):
             nn.ReLU(),
             nn.Flatten()
         )
-        
+
         with torch.no_grad():
             dummy = torch.zeros(1, 3, 96, 128)
             cnn_output_size = self.cnn(dummy).shape[1]
-            
+
         self.fc1 = nn.Linear(cnn_output_size + 5, 256)
         self.fc2 = nn.Linear(256, 256)
         self.fc3 = nn.Linear(256, 1)
@@ -147,7 +147,8 @@ class SoftQNetwork(nn.Module):
         x = torch.cat([x, a], 1)
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
-        return self.fc3(x)
+        x = self.fc3(x)
+        return x.squeeze(-1)
 
 
 LOG_STD_MAX = 2
@@ -188,8 +189,10 @@ class Actor(nn.Module):
         return (mean_cont, log_std_cont), logits_discrete
 
     def get_action(self, x):
+        if isinstance(x, np.ndarray):
+            x = torch.FloatTensor(x).to(self.action_scale.device)
         (mean_cont, log_std_cont), logits_discrete = self(x)
-        
+
         # Continuous actions
         std_cont = log_std_cont.exp()
         normal = torch.distributions.Normal(mean_cont, std_cont)
@@ -197,24 +200,24 @@ class Actor(nn.Module):
         y_t = torch.tanh(x_t)
         steer = y_t[..., 0] * self.action_scale[0] + self.action_bias[0]
         accel = y_t[..., 1] * self.action_scale[1] + self.action_bias[1]
-        
+
         # Discrete actions
         discrete_dist = torch.distributions.Bernoulli(logits=logits_discrete)
         discrete_actions = discrete_dist.sample()
-        
+
         # Combine actions
         action = torch.cat([
             steer.unsqueeze(-1),
             accel.unsqueeze(-1),
             discrete_actions
         ], dim=-1)
-        
+
         # Log probs
         log_prob_cont = normal.log_prob(x_t) - torch.log(
             self.action_scale * (1 - y_t.pow(2)) + 1e-6
         )
         log_prob_discrete = discrete_dist.log_prob(discrete_actions)
-        
+
         return action, log_prob_cont.sum(-1) + log_prob_discrete.sum(-1), None
 
 
@@ -307,7 +310,13 @@ poetry run pip install "stable_baselines3==2.0.0a1"
                 np.random.randint(2)
             ] for _ in range(envs.num_envs)])
         else:
-            actions = actions.detach().cpu().numpy()
+            with torch.no_grad():
+                # Convert observation to tensor and move to device
+                obs_tensor = torch.FloatTensor(obs).to(device)
+                # Get actions from policy
+                actions, _, _ = actor.get_action(obs_tensor)
+                # Convert actions to numpy array
+                actions = actions.cpu().numpy()
 
         # TRY NOT TO MODIFY: execute the game and log data.
         next_obs, rewards, terminations, truncations, infos = envs.step(actions)
@@ -323,9 +332,12 @@ poetry run pip install "stable_baselines3==2.0.0a1"
 
         # TRY NOT TO MODIFY: save data to reply buffer; handle `final_observation`
         real_next_obs = next_obs.copy()
-        for idx, trunc in enumerate(truncations):
-            if trunc:
-                real_next_obs[idx] = infos["final_observation"][idx]
+        for idx in range(envs.num_envs):
+            if truncations[idx] or terminations[idx]:
+                if "final_observation" in infos:
+                    real_next_obs[idx] = infos["final_observation"][idx]
+                else:  # Fallback for environments without final_observation
+                    real_next_obs[idx] = infos.get("final_observation", next_obs)[idx]
         rb.add(obs, real_next_obs, actions, rewards, terminations, infos)
 
         # TRY NOT TO MODIFY: CRUCIAL step easy to overlook
@@ -339,7 +351,7 @@ poetry run pip install "stable_baselines3==2.0.0a1"
                 qf1_next_target = qf1_target(data.next_observations, next_state_actions)
                 qf2_next_target = qf2_target(data.next_observations, next_state_actions)
                 min_qf_next_target = torch.min(qf1_next_target, qf2_next_target) - alpha * next_state_log_pi
-                next_q_value = data.rewards.flatten() + (1 - data.dones.flatten()) * args.gamma * (min_qf_next_target).view(-1)
+                next_q_value = data.rewards.flatten() + (1 - data.dones.flatten()) * args.gamma * min_qf_next_target.flatten()
 
             qf1_a_values = qf1(data.observations, data.actions).view(-1)
             qf2_a_values = qf2(data.observations, data.actions).view(-1)

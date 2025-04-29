@@ -10,10 +10,10 @@ RESCUE_TIMEOUT = 15
 
 
 class SuperTuxKartEnv(gym.Env):
-    def __init__(self, track, max_frames=1000):
+    def __init__(self, track_name, max_frames=1000):
         super().__init__()
         # declaring variables to be used later
-        self.track = track
+        self.track_name = track_name
         self.max_frames = max_frames
         self.pytux = PyTux(screen_width=128, screen_height=96)
         self.mode = "human"
@@ -36,7 +36,6 @@ class SuperTuxKartEnv(gym.Env):
     # looking at reset usage in utils.py and just applying it to this function called reset
     # reminder that reset is called before every race starts, so just need to think about what conditions need to be met at race start
     def reset(self, seed=None, options=None):
-
         # create a plot figure and axis for rendering
         self.fig, self.ax = plt.subplots()
 
@@ -49,8 +48,7 @@ class SuperTuxKartEnv(gym.Env):
         self.config = pystk.RaceConfig()
         self.config.num_kart = 1  
         self.config.players[0].controller = pystk.PlayerConfig.Controller.PLAYER_CONTROL
-        self.config.track = str(self.track)
-
+        self.config.track = str(self.track_name)
 
         # starting race, similar to how it is done in utils.py
         self.pytux.k = pystk.Race(self.config)
@@ -66,9 +64,14 @@ class SuperTuxKartEnv(gym.Env):
         self.last_rescue = 0
         self.t = 0
 
-        # return method for gymnasium, required to return object and dictionary, here our dictionary is blank since we dont want to add meta data rn
+        # return method for gymnasium, required to return object and dictionary
         obs = np.array(self.pytux.k.render_data[0].image)
-        return obs, {}  
+        
+        # Initialize info dictionary
+        info = {}
+        info["final_observation"] = obs.copy()
+        
+        return obs, info
 
     # defining what step looks lik in gym, copying a lot from utils.py
     def step(self, action_dict):
@@ -120,6 +123,11 @@ class SuperTuxKartEnv(gym.Env):
         # check for track length
         terminated = np.isclose(kart.overall_distance / track_length, 1.0, atol=2e-3)
         truncated = self.step_count >= self.max_frames
+
+        # Store final observation before reset
+        info = {}
+        if terminated or truncated:
+            info["final_observation"] = obs.copy()
 
         return obs, reward, terminated, truncated, {}
 
