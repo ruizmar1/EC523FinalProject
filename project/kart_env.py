@@ -118,7 +118,7 @@ class SuperTuxKartEnv(gym.Env):
         obs = np.array(self.pytux.k.render_data[0].image)
 
         # BASIC REWARD, WILL NEED TO DO SOME REWARD SHAPING LATER
-        reward = kart.overall_distance
+        reward = kart.overall_distance/100
 
         # check for track length
         terminated = np.isclose(kart.overall_distance / track_length, 1.0, atol=2e-3)
