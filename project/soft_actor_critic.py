@@ -3,7 +3,7 @@ import os
 import random
 import time
 from dataclasses import dataclass
-from kart_env import SuperTuxKartEnv
+from project.kart_env_sac import SuperTuxKartEnv
 
 import gymnasium as gym
 import numpy as np
@@ -50,13 +50,13 @@ class Args:
     """the discount factor gamma"""
     tau: float = 0.005
     """target smoothing coefficient (default: 0.005)"""
-    batch_size: int = 256
+    batch_size: int = 128
     """the batch size of sample from the reply memory"""
     learning_starts: int = 5e3
     """timestep to start learning"""
     policy_lr: float = 3e-4
     """the learning rate of the policy network optimizer"""
-    q_lr: float = 1e-3
+    q_lr: float = 3e-4
     """the learning rate of the Q network network optimizer"""
     policy_frequency: int = 2
     """the frequency of training policy (delayed)"""
@@ -98,25 +98,47 @@ class DictToTensorWrapper(gym.Wrapper):
         return super().step(action_dict)
 
 
+class TransformFinalObservationWrapper(gym.Wrapper):
+    def step(self, action):
+        obs, reward, terminated, truncated, info = super().step(action)
+        if "final_observation" in info and info["final_observation"] is not None:
+            info["final_observation"] = info["final_observation"].transpose(2, 0, 1).astype(np.float32) / 255.0
+        return obs, reward, terminated, truncated, info
+    
+    def reset(self, **kwargs):
+        obs, info = super().reset(**kwargs)
+        if "final_observation" in info and info["final_observation"] is not None:
+            info["final_observation"] = info["final_observation"].transpose(2, 0, 1).astype(np.float32) / 255.0
+        return obs, info
+
+
 def make_env(env_id, seed, idx, capture_video, run_name):
     def thunk():
         env = SuperTuxKartEnv(track_name=args.track_name)
-        if capture_video and idx == 0:
-            env = gym.wrappers.RecordVideo(env, f"videos/{run_name}", 
-                episode_trigger=lambda x: x % 100 == 0)
-        env = gym.wrappers.RecordEpisodeStatistics(env)
+        
+        # First transform observations to CHW format
         env = gym.wrappers.TransformObservation(
             env,
             lambda obs: obs.transpose(2, 0, 1).astype(np.float32) / 255.0,
             gym.spaces.Box(
                 low=0, 
                 high=1.0, 
-                shape=(3, 96, 128),  # CHW format
+                shape=(3, 96, 128),
                 dtype=np.float32
             )
         )
+        
+        # Add wrapper to transform final_observation
+        env = TransformFinalObservationWrapper(env)
+        
+        if capture_video and idx == 0:
+            env = gym.wrappers.RecordVideo(env, f"videos/{run_name}", 
+                episode_trigger=lambda x: x % 100 == 0)
+        
+        env = gym.wrappers.RecordEpisodeStatistics(env)
         env = DictToTensorWrapper(env)
         env.action_space.seed(seed)
+        env.observation_space.seed(seed)
         return env
     return thunk
 
@@ -300,25 +322,22 @@ poetry run pip install "stable_baselines3==2.0.0a1"
     # TRY NOT TO MODIFY: start the game
     obs, _ = envs.reset(seed=args.seed)
     for global_step in range(args.total_timesteps):
-        # ALGO LOGIC: put action logic here
+        # Action logic
         if global_step < args.learning_starts:
+            # Random actions matching your action space structure
             actions = np.array([[
-                np.random.uniform(-1, 1),
-                np.random.uniform(0, 1),
-                np.random.randint(2),
-                np.random.randint(2),
-                np.random.randint(2)
+                np.random.uniform(-1, 1),  # steer
+                np.random.uniform(0, 1),    # acceleration
+                np.random.randint(2),       # brake
+                np.random.randint(2),       # nitro
+                np.random.randint(2)        # drift
             ] for _ in range(envs.num_envs)])
         else:
             with torch.no_grad():
-                # Convert observation to tensor and move to device
                 obs_tensor = torch.FloatTensor(obs).to(device)
-                # Get actions from policy
-                actions, _, _ = actor.get_action(obs_tensor)
-                # Convert actions to numpy array
-                actions = actions.cpu().numpy()
+                action_dict, _, _ = actor.get_action(obs_tensor)
 
-        # TRY NOT TO MODIFY: execute the game and log data.
+        # Environment step
         next_obs, rewards, terminations, truncations, infos = envs.step(actions)
 
         # TRY NOT TO MODIFY: record rewards for plotting purposes
@@ -346,17 +365,29 @@ poetry run pip install "stable_baselines3==2.0.0a1"
         # ALGO LOGIC: training.
         if global_step > args.learning_starts:
             data = rb.sample(args.batch_size)
+            
+            # Convert array actions to dict for Q networks
             with torch.no_grad():
                 next_state_actions, next_state_log_pi, _ = actor.get_action(data.next_observations)
+                
+                # Get Q-values for next state
                 qf1_next_target = qf1_target(data.next_observations, next_state_actions)
                 qf2_next_target = qf2_target(data.next_observations, next_state_actions)
+                
+                # Take min Q-value and subtract entropy term
                 min_qf_next_target = torch.min(qf1_next_target, qf2_next_target) - alpha * next_state_log_pi
+                
+                # Calculate target Q-value (shape: [batch_size])
                 next_q_value = data.rewards.flatten() + (1 - data.dones.flatten()) * args.gamma * min_qf_next_target.flatten()
+                
+                # Clamp Q-values
+                next_q_value = next_q_value.clamp(-1/(1-args.gamma), 1/(1-args.gamma))
 
-            qf1_a_values = qf1(data.observations, data.actions).view(-1)
-            qf2_a_values = qf2(data.observations, data.actions).view(-1)
-            qf1_loss = F.mse_loss(qf1_a_values, next_q_value)
-            qf2_loss = F.mse_loss(qf2_a_values, next_q_value)
+            # Q function update
+            current_q1 = qf1(data.observations, data.actions)
+            current_q2 = qf2(data.observations, data.actions)
+            qf1_loss = F.mse_loss(current_q1.view(-1), next_q_value)
+            qf2_loss = F.mse_loss(current_q2.view(-1), next_q_value)
             qf_loss = qf1_loss + qf2_loss
 
             # optimize the model
@@ -399,8 +430,8 @@ poetry run pip install "stable_baselines3==2.0.0a1"
                     target_param.data.copy_(args.tau * param.data + (1 - args.tau) * target_param.data)
 
             if global_step % 100 == 0:
-                writer.add_scalar("losses/qf1_values", qf1_a_values.mean().item(), global_step)
-                writer.add_scalar("losses/qf2_values", qf2_a_values.mean().item(), global_step)
+                writer.add_scalar("losses/qf1_values", current_q1.mean().item(), global_step)
+                writer.add_scalar("losses/qf2_values", current_q2.mean().item(), global_step)
                 writer.add_scalar("losses/qf1_loss", qf1_loss.item(), global_step)
                 writer.add_scalar("losses/qf2_loss", qf2_loss.item(), global_step)
                 writer.add_scalar("losses/qf_loss", qf_loss.item() / 2.0, global_step)
@@ -413,6 +444,8 @@ poetry run pip install "stable_baselines3==2.0.0a1"
                     f"Q2 Loss = {qf2_loss.item():.3f}, "
                     f"Actor Loss = {actor_loss.item():.3f}"
                 )
+                print("Q-values:", qf1_pi.mean().item(), qf2_pi.mean().item())
+                print("Entropy:", -log_pi.mean().item())
                 writer.add_scalar(
                     "charts/SPS",
                     int(global_step / (time.time() - start_time)),
