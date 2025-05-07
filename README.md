@@ -47,7 +47,7 @@ The reason we decided to implement Gymnasium into this project is because it wil
 
 This is a custom Gymnasium wrapper written for PySuperTuxKart. We created a class called SuperTuxKartEnv with functions __init__(), reset(), step(), and render(). The init functions initalizes the environment, the reset function defines how a reset will be preformed, the step function defines how to step through the environment (i.e. take an action, pick up an award, transition to next state), and the render function displays the race using matplotlib. A lot of this code was transferred and re-used from old code in utils.py. We are just redefining the way that the environment is driven, but big picture we are not changing to much. 
 
-![til](./images/Video-2.gif
+![til](./images/Video-2.gif)
 <center> Video of Rendered Gymnasium Enivironment </center>
 
  ## marissa branch
