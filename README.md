@@ -66,17 +66,17 @@ To plot the results, simply copy and paste your output into the graph.py functio
 python3.10 graph.py
 ```
 ## gabi branch
- The driver code is implemented in EC523FinalProject/homework/ppo.py file. This file built off from the CleanRL implemenation of the same name: https://github.com/vwxyzjn/cleanrl/blob/master/cleanrl/ppo.py. We made some tweaks to make it compatible with the custom SuperTuxKart environment. This script is the driver code for this implementation. It runs up to 50,000 timesteps of the game environement and runs the PPO update every 128 time steps. It also renders the game image. To run this file, use the following command:
+ The driver code is implemented in EC523FinalProject/homework/ppo.py file. This file built off from the CleanRL implemenation of the same name: https://github.com/vwxyzjn/cleanrl/blob/master/cleanrl/ppo.py. We made some tweaks to make it compatible with the custom SuperTuxKart environment. This script is the driver code for this implementation. It runs up to 50,000 timesteps of the game environement and runs the PPO update every 128 time steps. It also renders the game image during training. To run this file, use the following command:
 ```
 python3.10 ppo.py --num_envs 1
 ```
-If you do not specify the track it defaults to lighthouse
+If you do not specify the track it defaults to lighthouse.
 
-To plot the results, simply copy and paste your output into the plot_output.py function and run it using the following command:
+To plot the results, simply copy and paste your output between the ''' ''' in the raw_data variable of the plot_output.py function, and run it using the following command:
 ```
 python3.10 plot_output.py
 ```
-- [Link to the PPO training video](https://drive.google.com/file/d/1A-dd5cMtzMWlm_5SEhd-NszYxM8PTkEe/view?usp=sharing).
+- [Link to the PPO training video](https://drive.google.com/file/d/128smr3d9xT0DWCpyXJ1xi7RPODWwg4G7/view?usp=sharing).
 
 
 
