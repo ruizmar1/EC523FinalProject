@@ -34,13 +34,13 @@
   </tr>
 </table>
 
+## Python Version
+It is important to note that we are using a specific version of python, python 3.10. PySuperTuxKart is not compatible with newer versions of Python and the new Mac chips. As such, we had to use an emulator (in our case VS Code, here is link to download: https://code.visualstudio.com/download) to run an intel chip version of python. To specify which version of python we want to use, we added an alias in ourr .zprofiel for this specific python version which is python 3.10. For more details on this procedure, follow this tutorial: https://acrogenesis.com/running-intel-python-on-m1. 
 
-Currently the biggest changes we made are in the kart_env.py file and marissa_test.py file.
-
-To find kart_env.py go to EC523FinalProject/homework/kart_env.py
-To find marissa_test.py go to EC523FinalProject/homework/marissa_test.py
+Disclaimer for Mac M3 chips: one of our teammates could not get this workaround to work on her newer Macbook. Be warned that the above tutorial may not work for you, and in that case we have no answers (we tried for many hours though)
 
 ## Gymnasium
+
 The reason we decided to implement Gymnasium into this project is because it will make the implementations of policy gradient methods much easier. We plan on using CleanRL pre-defiend implementations to seamlessly integrate these policy gradient methods. In this way we can minimize errors in the actual implementation and not sink too much time into debugging.
 
 ## kart_env.py
@@ -49,8 +49,19 @@ This is a custom Gymnasium wrapper written for PySuperTuxKart. We created a clas
 
 ## marissa_try.py
 
-This is the driver code, it basically runs a while loop until the race is done or times out. Here, you can specify which race track you want to use. The options are 'lighthouse', 'hacienda', 'zengarden', 'snowtuxpeak', 'cornfield_crossing', and 'scotland.' Here is a sample of how to run the code:
+This is the initial driver code, it basically runs a while loop until the race is done or times out. Here, you can specify which race track you want to use. The options are 'lighthouse', 'hacienda', 'zengarden', 'snowtuxpeak', 'cornfield_crossing', and 'scotland.' Here is a sample of how to run the code:
 ```
 python3.10 marissa_test.py --track snowtuxpeak
 ```
- Here it is important to note that we are using a specific version of python, python 3.10. PySuperTuxKart is not compatible with newer versions of Python and the new Mac chips. As such, we had to use an emulator (in our case VS Code) to run an intel chip version of python. To specify which version of python we want to use, we added an alias in ourr .zprofiel for this specific python version which is python 3.10.
+If you do not specificy the track it defaults to lighthouse
+
+ ## marissa branch
+ The driver code is implemented in EC523FinalProject/homework/ddpg_continuous_action.py file. This file built off from the CleanRL implemenation of the same name: https://github.com/vwxyzjn/cleanrl/blob/master/cleanrl/ddpg_continuous_action.py. We made some tweaks to make it compatible with the custom SuperTuxKart environment. This script is the driver code for this implementation. It runs 25,000 timesteps of the game environement and runs a DDPG update every 2 time steps. It also renders the game image. At the end of the run, it plots the loss over time using matplotlib. To run this file, use the following command:
+```
+python3.10 ddpg_continuous_action.py --track lighthouse
+```
+If you do not specify the track it defaults to lighthouse
+
+ ## SOC_Bennett branch
+
+ ## gabi branch
