@@ -57,5 +57,8 @@ If you do not specify the track it defaults to lighthouse
 
 
  ## SOC_Bennett branch
+The driver code is implemented in EC523FinalProject/project/soft_actor_critic.py file. This file built off from the CleanRL implemenation of the same name: https://github.com/vwxyzjn/cleanrl/blob/master/cleanrl/sac_continuous_action.py. We made some tweaks to make it compatible with the custom SuperTuxKart environment. This script is the driver code for this implementation. It runs 5,000 timesteps of the game environment to build the replay buffer and trains the Q functions and actors every time step. It also renders the game image. To run this file, use the following command:
+```
+python3.10 soft_actor_critic.py
 
  ## gabi branch
