@@ -61,4 +61,5 @@ The driver code is implemented in EC523FinalProject/project/soft_actor_critic.py
 ```
 python3.10 soft_actor_critic.py
 
- ## gabi branch
+```
+## gabi branch
