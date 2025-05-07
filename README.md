@@ -53,6 +53,7 @@ This is a custom Gymnasium wrapper written for PySuperTuxKart. We created a clas
 python3.10 ddpg_continuous_action.py --track lighthouse
 ```
 If you do not specify the track it defaults to lighthouse
+- [Link to the DDPG training video](https://drive.google.com/file/d/1md7qpvwBSFCN1MlbZJqVEG3HJm2ySojz/view?usp=share_link).
 
 
  ## SOC_Bennett branch
