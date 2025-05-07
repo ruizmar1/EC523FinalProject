@@ -47,8 +47,8 @@ The reason we decided to implement Gymnasium into this project is because it wil
 
 This is a custom Gymnasium wrapper written for PySuperTuxKart. We created a class called SuperTuxKartEnv with functions __init__(), reset(), step(), and render(). The init functions initalizes the environment, the reset function defines how a reset will be preformed, the step function defines how to step through the environment (i.e. take an action, pick up an award, transition to next state), and the render function displays the race using matplotlib. A lot of this code was transferred and re-used from old code in utils.py. We are just redefining the way that the environment is driven, but big picture we are not changing to much. 
 
+Video of Rendered Gymnasium Enivironment:
 ![til](./images/Video-2.gif)
-<div style="text-align: center;">Video of Rendered Gymnasium Enivironment</div>
 
  ## marissa branch
  The driver code is implemented in EC523FinalProject/homework/ddpg_continuous_action.py file. This file built off from the CleanRL implemenation of the same name: https://github.com/vwxyzjn/cleanrl/blob/master/cleanrl/ddpg_continuous_action.py. We made some tweaks to make it compatible with the custom SuperTuxKart environment. This script is the driver code for this implementation. It runs 25,000 timesteps of the game environement and runs a DDPG update every 2 time steps. It also renders the game image. At the end of the run, it plots the loss over time using matplotlib. To run this file, use the following command:
