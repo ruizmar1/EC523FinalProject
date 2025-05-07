@@ -76,7 +76,7 @@ To plot the results, simply copy and paste your output into the plot_output.py f
 ```
 python3.10 plot_output.py
 ```
-- [Link to the DDPG training video](https://drive.google.com/file/d/1A-dd5cMtzMWlm_5SEhd-NszYxM8PTkEe/view?usp=sharing).
+- [Link to the PPO training video](https://drive.google.com/file/d/1A-dd5cMtzMWlm_5SEhd-NszYxM8PTkEe/view?usp=sharing).
 
 
 
