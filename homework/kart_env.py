@@ -8,6 +8,8 @@ import cv2
 RESCUE_TIMEOUT = 15
 
 # custom SuperTuxKart gymnasium environment for this project's usage
+# note to ssa, I think this is pretty compete, I can't see any issues right now
+# only issue I can forsee is reward shaping
 
 class SuperTuxKartEnv(gym.Env):
     def __init__(self, track, max_frames=1000):
@@ -20,8 +22,8 @@ class SuperTuxKartEnv(gym.Env):
     
         # Gym action space, all continuous until we discretize the discrete values
         self.action_space = gym.spaces.Box(
-            low=np.array([-1.0, 0.0, 0.0, 0.0, 0.0]), #steer, acc, break, drift, nitro (to check)
-            high=np.array([1.0, 1.0, 1.0, 1.0, 1.0]),
+            low=np.array([-0.5, 0.0, 0.0, 0.0, 0.0]), #steer, acc, break, drift, nitro (to check)
+            high=np.array([0.5, 1.0, 1.0, 1.0, 1.0]),
             dtype=np.float32
         )
 
@@ -56,7 +58,7 @@ class SuperTuxKartEnv(gym.Env):
         self.pytux.k.start()
         self.pytux.k.step()
 
-        # Update track object - keep this separate from the config
+        # update track object
         self.track = pystk.Track()
         self.track.update()
 
@@ -69,89 +71,10 @@ class SuperTuxKartEnv(gym.Env):
         obs = np.array(self.pytux.k.render_data[0].image)
         return obs, {}
 
-    # def reset(self, seed=None, options=None):
-    #     # Close any existing figure
-    #     if hasattr(self, 'fig') and plt.fignum_exists(self.fig.number):
-    #         plt.close(self.fig)
-        
-    #     # Rest of your reset code...
-    #     self.config = pystk.RaceConfig()
-    #     self.config.num_kart = 1  
-    #     self.config.players[0].controller = pystk.PlayerConfig.Controller.PLAYER_CONTROL
-    #     self.config.track = self.track_name
-        
-    #     # Initialize new race
-    #     self.pytux.k = pystk.Race(self.config)
-    #     self.pytux.k.start()
-    #     self.pytux.k.step()
-        
-    #     # Reset tracking variables
-    #     self.step_count = 0
-    #     self.last_rescue = 0
-    #     self.t = 0
-        
-    #     # Return initial observation
-    #     obs = np.array(self.pytux.k.render_data[0].image)
-    #     return obs, {}
-
-    # defining what step looks lik in gym, copying a lot from utils.py
-    #--------Marghe tried to change this to stop it from restarting randomly so I commented this step funciton out 
-    #and added a new one
-
-    # def step(self, action_array):
-    #     # updating steps and time step
-    #     self.step_count += 1
-    #     self.t += 1
-
-    #     # IF the racer doesn't finish the track within 1000 time steps, just end game 
-    #     if self.t>1000:
-    #         terminated = 1
-
-    #     # update world state at each step
-    #     state = pystk.WorldState()
-    #     state.update()
-    #     kart = state.players[0].kart
-
-    #     # building action
-    #     action = pystk.Action()
-    #     # adding action attributes, RIGHT NOW IT IS RANDOM in the future we will poll action from neural net
-    #     action.steer = float(action_array[0])
-    #     action.acceleration = float(action_array[1])
-    #     action.brake = bool(action_array[2] > 0.5)
-    #     action.nitro = bool(action_array[3] > 0.5)
-    #     action.drift = bool(action_array[4] > 0.5)
-
-    #     # detecting etect crash or  timeout
-    #     if (np.linalg.norm(kart.velocity)) < 1 and self.t-self.last_rescue> RESCUE_TIMEOUT:
-    #         print("Kart crashed! Respawning...")
-    #         action.rescue = True
-    #         self.last_rescue = self.t
-
-    #     # step through the simulation
-    #     self.pytux.k.step(action)
-
-    #     # Update track
-    #     self.track = pystk.Track()
-    #     self.track.update()
-    #     # get the track length 
-    #     # adding stuff to avoid division
-    #     track_length = self.track.length if self.track.length > 0 else 1.0  
-
-
-    #     # new observation after stepping through the environment
-    #     obs = np.array(self.pytux.k.render_data[0].image)
-
-    #     # BASIC REWARD, WILL NEED TO DO SOME REWARD SHAPING LATER
-    #     reward = kart.overall_distance
-
-    #     # check for track length
-    #     terminated = np.isclose(kart.overall_distance / track_length, 1.0, atol=2e-3)
-    #     truncated = self.step_count >= self.max_frames
-
-    #     return obs, reward, terminated, truncated, {}
 
 #MARGHE added the following to ty and fix the restarting envoroment issue
     def step(self, action_array):
+        reward_crash = 0
         self.step_count += 1
         self.t += 1
 
@@ -159,20 +82,29 @@ class SuperTuxKartEnv(gym.Env):
         state = pystk.WorldState()
         state.update()
         kart = state.players[0].kart
+        # forward_velocity = np.dot(kart.velocity, kart.front) #added  by marghe
+
 
         # Build action
         action = pystk.Action()
         action.steer = float(action_array[0])
-        action.acceleration = float(action_array[1])
-        action.brake = bool(action_array[2] > 0.5)
+        #------added by marghe, never want accleration less than .5
+        action.acceleration = float(np.clip(action_array[1], 0.5, 1.0))
+    
+        # added by ssa, we are never breaking!! no need
+        action.brake = bool(0)
+
+        # rounding of to boolean values
         action.nitro = bool(action_array[3] > 0.5)
         action.drift = bool(action_array[4] > 0.5)
 
+    
         # Detect crash or timeout
         if (np.linalg.norm(kart.velocity)) < 1 and self.t-self.last_rescue > RESCUE_TIMEOUT:
-            print("Kart crashed! Respawning...")
+            #print("Kart crashed! Respawning...")
             action.rescue = True
             self.last_rescue = self.t
+            reward_crash=-10
 
         # Step through simulation
         self.pytux.k.step(action)
@@ -184,8 +116,20 @@ class SuperTuxKartEnv(gym.Env):
         # Get new observation
         obs = np.array(self.pytux.k.render_data[0].image)
 
-        # Reward
-        reward = kart.overall_distance
+        
+        # Combine rewards
+        # reward = forward_reward + velocity_reward + direction_penalty + cumulative_steer_penalty
+        # if forward_velocity < 0.1:
+        #     reward -= 5
+        # # #----------------
+        # if kart.overall_distance>800:
+        #     reward = 0 + reward_crash
+        # elif kart.overall_distance<100:
+        #     reward = 0 + reward_crash
+        # else:
+        #     reward = kart.overall_distance/100 + reward_crash
+        reward = kart.overall_distance/800 
+        
 
         # Termination conditions
         #terminated = np.isclose(kart.overall_distance / track_length, 1.0, atol=2e-3)
@@ -203,6 +147,8 @@ class SuperTuxKartEnv(gym.Env):
             truncated = False
 
         return obs, reward, terminated, truncated, {}
+
+
 
 #--------------
     # rendering image to see kart

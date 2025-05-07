@@ -21,33 +21,33 @@ import cv2
 
 @dataclass
 class Args:
-    exp_name: str = os.path.basename(__file__)[: -len(".py")]
+    exp_name: str = os.path.basename(__file__)[: -len(".py")] # name of experiment
     """the name of this experiment"""
-    seed: int = 1
+    seed: int = 1 # seed
     """seed of the experiment"""
-    torch_deterministic: bool = True
+    torch_deterministic: bool = True # for DDPG we want this to be true
     """if toggled, `torch.backends.cudnn.deterministic=False`"""
-    cuda: bool = True
+    cuda: bool = True # we want cuda
     """if toggled, cuda will be enabled by default"""
-    track: bool = False
+    track: bool = False #I don't know i we want this
     """if toggled, this experiment will be tracked with Weights and Biases"""
-    wandb_project_name: str = "cleanRL"
+    wandb_project_name: str = "cleanRL" #not going to use wandB in the end
     """the wandb's project name"""
     wandb_entity: str = None
     """the entity (team) of wandb's project"""
-    capture_video: bool = False
+    capture_video: bool = False # probably won't capture a video
     """whether to capture videos of the agent performances (check out `videos` folder)"""
-    save_model: bool = False
+    save_model: bool = False # eventually we do want to save a model, check this out later
     """whether to save model into the `runs/{run_name}` folder"""
-    upload_model: bool = False
+    upload_model: bool = False # might want to do this too? Ask marghe
     """whether to upload the saved model to huggingface"""
     hf_entity: str = ""
     """the user or org name of the model repository from the Hugging Face Hub"""
 
     # Algorithm specific arguments
-    env_id: str = "Hopper-v4"
-    """the environment id of the Atari game"""
-    total_timesteps: int = 1000000
+    env_id: str = "SuperTuxKart-v0"
+    """the environment id of PySuperTuxKart game"""
+    total_timesteps: int = 25000
     """total timesteps of the experiments"""
     learning_rate: float = 3e-4
     """the learning rate of the optimizer"""
@@ -59,10 +59,8 @@ class Args:
     """target smoothing coefficient (default: 0.005)"""
     batch_size: int = 256
     """the batch size of sample from the reply memory"""
-    exploration_noise: float = 0.1
+    exploration_noise: float = 0.5
     """the scale of exploration noise"""
-    #learning_starts: int = 25e3
-    #MARGHE changed this to 1001 to make learning start after 1001 steps!!
     learning_starts: int = 1001
     """timestep to start learning"""
     policy_frequency: int = 2
@@ -71,47 +69,59 @@ class Args:
     """noise clip parameter of the Target Policy Smoothing Regularization"""
 
 
+# function to make PySuperTuxKart Environment
 def make_env(seed, track_name):
     def thunk():
         env = SuperTuxKartEnv(track=track_name)
         env = gym.wrappers.RecordEpisodeStatistics(env)
         env.action_space.seed(seed)
         return env
-
     return thunk
 
+
+# this is supposed to handle our image, right now PySuperTuxKart image is not ideal for CleanRL, here we shape it to make it work
 def preprocess_observation(obs):
-    # Ensure the observation is a numpy array
-    if isinstance(obs, np.ndarray):
-        # If the observation is already flattened (from vectorized env), reshape it
-        if len(obs.shape) == 1:
-            # Reshape to original image shape (96, 128, 3) based on your observation space
-            obs = obs.reshape(96, 128, 3)
-        
-        # Convert to grayscale if it's a color image
-        if len(obs.shape) == 3 and obs.shape[2] == 3:
-            gray = cv2.cvtColor(obs, cv2.COLOR_RGB2GRAY)
-        else:
-            gray = obs  # Already grayscale
-        
-        # Resize to a smaller shape
-        resized = cv2.resize(gray, (64, 64))
-        
-        # Normalize pixel values
-        normalized = resized / 255.0
-        
-        # Flatten the image
-        return normalized.flatten().astype(np.float32)
+
+    # handle batch dimension (from vectorized env)
+    # CleanRL likes to initialize multiple environments, we really only need one, maybe in the future can add more
+    if len(obs.shape) == 4:  # (num_envs, height, width, channels)
+        obs = obs[0]  # Take first env's observation
+    
+    # Convert to grayscale if needed, better for CleanRL
+    if len(obs.shape) == 3 and obs.shape[2] == 3:
+        gray = cv2.cvtColor(obs, cv2.COLOR_RGB2GRAY)
     else:
-        raise ValueError(f"Observation must be a numpy array, got {type(obs)}")
+        gray = obs  # Already grayscale
+    
+    # Verify image isn't empty for debugging purposes
+    # if it is empty, just send a blank images
+    if gray.size == 0:
+        print("Warning: Empty observation received!")
+        return np.zeros(64*64, dtype=np.float32)  # Return default
+    
+
+    ## here is where the actual preprocessing happens with cv2 (downsampling)
+    # trying to turn it into an image suitable for clean RL
+    # use try except block to handle errors
+    # if can't resize, just send blank image
+    try:
+        resized = cv2.resize(gray, (64, 64), interpolation=cv2.INTER_AREA)
+        flattened = resized.flatten().astype(np.float32) / 255.0
+        assert flattened.shape == (4096,), f"Unexpected shape: {flattened.shape}"
+        return flattened.astype(np.float32)
+    except Exception as e:
+        print(f"Preprocessing failed: {e}")
+        return np.zeros(4096, dtype=np.float32)
 
 
-# ALGO LOGIC: initialize agent here:
+# THIS is the CleanRL infrastructure, don't want to mess with too much
 class QNetwork(nn.Module):
     def __init__(self, env):
         super().__init__()
-        #self.fc1 = nn.Linear(np.array(env.single_observation_space.shape).prod() + np.prod(env.single_action_space.shape), 256)
-        self.fc1 = nn.Linear(64*64 + np.prod(env.single_action_space.shape), 256) #CHANGED BY MARGHE TO FIX MATRIX ERROR
+        # looks like we added this, its not obvious to me why right not, i guess we are turning image to 64x64 image
+        obs_dim = 4096  # From 64x64 image
+        act_dim = np.prod(env.single_action_space.shape) # flat linear shape of action space
+        self.fc1 = nn.Linear(obs_dim + act_dim, 256)
         self.fc2 = nn.Linear(256, 256)
         self.fc3 = nn.Linear(256, 1)
 
@@ -126,11 +136,11 @@ class QNetwork(nn.Module):
 class Actor(nn.Module):
     def __init__(self, env):
         super().__init__()
-        #self.fc1 = nn.Linear(np.array(env.single_observation_space.shape).prod(), 256)
-        self.fc1 = nn.Linear(64*64, 256)  # CHANGED BY MARGHE TO FIX MATRIX ERROR
+        self.fc1 = nn.Linear(4096, 256)
         self.fc2 = nn.Linear(256, 256)
         self.fc_mu = nn.Linear(256, np.prod(env.single_action_space.shape))
-        # action rescaling
+        
+        #action rescaling
         self.register_buffer(
             "action_scale", torch.tensor((env.action_space.high - env.action_space.low) / 2.0, dtype=torch.float32)
         )
@@ -151,8 +161,8 @@ if __name__ == "__main__":
     if sb3.__version__ < "2.0":
         raise ValueError(
             """Ongoing migration: run the following command to install the new dependencies:
-poetry run pip install "stable_baselines3==2.0.0a1"
-"""
+                poetry run pip install "stable_baselines3==2.0.0a1"
+                """
         )
     args = tyro.cli(Args)
     run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
@@ -184,19 +194,13 @@ poetry run pip install "stable_baselines3==2.0.0a1"
 
     # env setup
     parser = argparse.ArgumentParser(description="Run SuperTuxKart on a selected track.")
-    parser.add_argument('--track', type=str, default='lighthouse', help='Name of the track to run') #Picks the track, if you want another track you can change this
+    parser.add_argument('--track', type=str, default='lighthouse', help='Name of the track to run')
     args1 = parser.parse_args()
 
-    #env = SuperTuxKartEnv(track=args1.track)
-    #obs, _ = env.reset()
-    #obs = preprocess_observation(obs)
-    #obs_dim = np.prod(preprocess_observation(obs).shape) #ADDED BY marghe might be wrong
-    # Load actor model
-
-
-    envs = gym.vector.SyncVectorEnv([make_env(args.seed,  args1.track)])
+    envs = gym.vector.SyncVectorEnv([make_env(args.seed, args1.track)])
     assert isinstance(envs.single_action_space, gym.spaces.Box), "only continuous action space is supported"
 
+    # forward pass through architecture
     actor = Actor(envs).to(device)
     qf1 = QNetwork(envs).to(device)
     qf1_target = QNetwork(envs).to(device)
@@ -206,7 +210,21 @@ poetry run pip install "stable_baselines3==2.0.0a1"
     q_optimizer = optim.Adam(list(qf1.parameters()), lr=args.learning_rate)
     actor_optimizer = optim.Adam(list(actor.parameters()), lr=args.learning_rate)
 
-    envs.single_observation_space.dtype = np.float32
+    # adding variables so I can graph later
+    timesteps_for_graph = []
+    qf1_loss_graph = []
+    actor_loss_graph = []
+
+    # adding this fos observation space
+    from gymnasium.spaces import Box
+    preprocessed_obs_space = Box(
+        low=0,
+        high=1,
+        shape=(4096,),
+        dtype=np.float32
+    )
+
+    # replay buffer infastructure
     rb = ReplayBuffer(
         args.buffer_size,
         envs.single_observation_space,
@@ -217,35 +235,41 @@ poetry run pip install "stable_baselines3==2.0.0a1"
     start_time = time.time()
 
     # TRY NOT TO MODIFY: start the game
-    obs, _ = envs.reset(seed=args.seed)
-    if isinstance(obs, dict):
-        obs = obs['image']  # or whatever key contains the image
-        obs = preprocess_observation(obs)
+    obs_normal, _ = envs.reset(seed=args.seed)
+    obs = preprocess_observation(obs_normal)
+
     for global_step in range(args.total_timesteps):
         # ALGO LOGIC: put action logic here
         if global_step < args.learning_starts:
+            # randomly sampling in first go
             actions = np.array([envs.single_action_space.sample() for _ in range(envs.num_envs)])
         else:
             with torch.no_grad():
-                processed_obs = preprocess_observation(obs) #ADDED BY MARGHE to fix s mstrix multiplication error
-                actions = actor(torch.Tensor(obs).to(device))
+                # getting actions from NN
+                processed_obs = torch.FloatTensor(preprocess_observation(obs)).unsqueeze(0).to(device)
+                actions = actor(processed_obs)
                 actions += torch.normal(0, actor.action_scale * args.exploration_noise)
-                actions = actions.cpu().numpy().clip(envs.single_action_space.low, envs.single_action_space.high)
-
-        # TRY NOT TO MODIFY: execute the game and log data.
-        next_obs, rewards, terminations, truncations, infos = envs.step(actions)
-
-        # if global_step % 100 ==0:
-        #     env_to_render = envs.envs[0].env
-        #     done = terminations[0] or truncations[0]
-        #     rendered_img = env_to_render.render(done)
+                #actions = actions.cpu().numpy().clip(envs.single_action_space.low, envs.single_action_space.high)
+                        # Clip to action space bounds
+                actions = np.clip(actions, envs.single_action_space.low, envs.single_action_space.high)
+                #print(actions)
         
+        # TRY NOT TO MODIFY: execute the game and log data.
+        # taking step through environment
+        next_obs, rewards, terminations, truncations, infos = envs.step(actions)
+        #print(f"Reward: {rewards}") 
+        # need to pre process NEXT observation
+        processed_next_obs = preprocess_observation(next_obs)
 
+        # cause apparently we have multiple environments, Gabi said she fixed this by adding to argument --env=1 or something like that
         env_to_render = envs.envs[0].env
+        # get from environment step
         done = terminations[0] or truncations[0]
+        # rendering image
         rendered_img = env_to_render.render(done)
 
         # TRY NOT TO MODIFY: record rewards for plotting purposes
+        # note to ssa, this could be useful at the end of training, I don't know if it actually gets called though
         if "final_info" in infos:
             for info in infos["final_info"]:
                 print(f"global_step={global_step}, episodic_return={info['episode']['r']}")
@@ -254,40 +278,49 @@ poetry run pip install "stable_baselines3==2.0.0a1"
                 break
 
         # TRY NOT TO MODIFY: save data to reply buffer; handle `final_observation`
+        # adding to replay buffer, Note the obs is not pre processed, I think it throughs an error when it is preprocessed
         real_next_obs = next_obs.copy()
         for idx, (trunc, term) in enumerate(zip(truncations, terminations)):
             if trunc or term:
-                # Check if 'final_observation' exists in infos
                 if "final_observation" in infos:
                     real_next_obs[idx] = infos["final_observation"][idx]
                 else:
-                    # If no final observation, just use the current next_obs
                     real_next_obs[idx] = next_obs[idx]
-        rb.add(obs, real_next_obs, actions, rewards, terminations, infos)
+        
+        rb.add(obs_normal, real_next_obs, actions, rewards, terminations, infos)
 
         # TRY NOT TO MODIFY: CRUCIAL step easy to overlook
+        # new obs becomes current obs
         obs = next_obs
 
         # ALGO LOGIC: training.
+        # after however many steps (determined by hyper parameter) we start training and never stop
         if global_step > args.learning_starts:
-            print("training") #marghe added to debug
             data = rb.sample(args.batch_size)
+            
             with torch.no_grad():
-                next_state_actions = target_actor(data.next_observations)
-                qf1_next_target = qf1_target(data.next_observations, next_state_actions)
+                # Preprocess observations
+                obs_np = data.observations.numpy()
+                next_obs_np = data.next_observations.numpy()
+                
+                processed_obs = torch.FloatTensor(np.array([preprocess_observation(obs) for obs in obs_np])).to(device)
+                processed_next_obs = torch.FloatTensor(np.array([preprocess_observation(obs) for obs in next_obs_np])).to(device)
+                
+                next_state_actions = target_actor(processed_next_obs)
+                qf1_next_target = qf1_target(processed_next_obs, next_state_actions)
                 next_q_value = data.rewards.flatten() + (1 - data.dones.flatten()) * args.gamma * (qf1_next_target).view(-1)
 
-            qf1_a_values = qf1(data.observations, data.actions).view(-1)
+            qf1_a_values = qf1(processed_obs, data.actions).view(-1)
             qf1_loss = F.mse_loss(qf1_a_values, next_q_value)
 
             # optimize the model
             q_optimizer.zero_grad()
             qf1_loss.backward()
             q_optimizer.step()
-            print("Running optimizer")
 
+            # oh this is cool, youc an specify how often you want to do an optimizer, lets add this ssa, maybe it never does this, oh i just checked it does it every 2 times
             if global_step % args.policy_frequency == 0:
-                actor_loss = -qf1(data.observations, actor(data.observations)).mean()
+                actor_loss = -qf1(processed_obs, actor(processed_obs)).mean()
                 actor_optimizer.zero_grad()
                 actor_loss.backward()
                 actor_optimizer.step()
@@ -304,6 +337,15 @@ poetry run pip install "stable_baselines3==2.0.0a1"
                 writer.add_scalar("losses/actor_loss", actor_loss.item(), global_step)
                 print("SPS:", int(global_step / (time.time() - start_time)))
                 writer.add_scalar("charts/SPS", int(global_step / (time.time() - start_time)), global_step)
+                print(
+
+                    f"Step {global_step}: "
+                    f"Q1 Loss = {qf1_loss.item():.3f}, "
+                    f"Actor Loss = {actor_loss.item():.3f}"
+                )
+                timesteps_for_graph.append(global_step)
+                qf1_loss_graph.append(qf1_loss.item())
+                actor_loss_graph.append(actor_loss.item())
 
     if args.save_model:
         model_path = f"runs/{run_name}/{args.exp_name}.cleanrl_model"
@@ -333,3 +375,25 @@ poetry run pip install "stable_baselines3==2.0.0a1"
 
     envs.close()
     writer.close()
+    import matplotlib.pyplot as plt
+
+    plt.figure(figsize=(10, 5))
+    plt.plot(timesteps_for_graph, qf1_loss_graph, label='QF1 Loss', color='blue')
+    plt.plot(timesteps_for_graph, actor_loss_graph, label='Actor Loss', color='green')
+
+    # Add labels and title
+    plt.xlabel('Timesteps')
+    plt.ylabel('Loss')
+    plt.title('Loss vs Timesteps')
+    plt.legend()
+    plt.grid(True)  
+    plt.tight_layout()
+
+    #Show the plot
+    plt.show()
+
+
+
+
+
+
